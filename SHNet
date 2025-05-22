@@ -1,1 +1,50 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class NewMod(nn.Module):
+    def __init__(self, num_class=41,embed_dims=[64, 128, 320, 640]):
+        super(NewMod,self).__init__()
+
+        self.channels = [64,128,320,512]
+        self.rgb_d = p2t_large()
+
+        self.cs1 = supixel(64)
+        self.cs2 = supixel(128)
+        # self.po1 = RGBDepthFusion(320, 320,320 )
+        # self.po2 = RGBDepthFusion(512, 512,512)
+        self.po1 = Split(dim=embed_dims[2])
+        self.po2 = Split(dim=embed_dims[3])
+
+        self.decoder = CombinedDecoder()
+
+    def forward(self,rgb,dep):
+        # rgb_list = self.rgb_mit(rgb)
+        rgb_list = self.rgb_d(rgb)
+        dep_list = self.rgb_d(dep)
+
+        # CS1 = rgb_list[0] + dep_list[0]
+        #
+        # CS2 = rgb_list[1] + dep_list[1]
+        CS1 = self.cs1(rgb_list[0], dep_list[0])
+        CS2 = self.cs2(rgb_list[1], dep_list[1])
+
+        po1 = self.po1(rgb_list[2], dep_list[2])
+        po2 = self.po2(rgb_list[3], dep_list[3])
+        # po1 = rgb_list[2] + dep_list[2]
+        # po2 = rgb_list[3] + dep_list[3]
+
+        # out = self.decoder(rgb_list[3], rgb_list[2], rgb_list[1], rgb_list[0])
+        out = self.decoder(po2, po1, CS2, CS1)
+
+        return out,CS1,CS2
+
+    def load_pre_sa(self, pre_model1):
+        new_state_dict3 = OrderedDict()
+        state_dict = torch.load(pre_model1)['state_dict']
+        for k, v in state_dict.items():
+            name = k[9:]
+            new_state_dict3[name] = v
+        self.rgb_d.load_state_dict(new_state_dict3, strict=False)
+        print('self.backbone_dmit loading')
 
